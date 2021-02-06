@@ -16,6 +16,7 @@
 #include <stdio.h>  // FILE I/O , printf()
 #include <stdlib.h> // standard ints, malloc() & free() , perror(), srand() & rand() / rand_s() on MSVC
 #include <string.h> // strcat(), strcpy()
+#include <stdint.h>
 
 #ifdef OTHER
 #include <time.h>   // time(NULL) for srand() , only needed if not using rand_s() or /dev/urandom
