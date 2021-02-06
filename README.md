@@ -63,4 +63,4 @@ A simplification of the tasks carried out by XOPT is :
 
 There is complexity , but those are merely details of implementation, such as memory-management , error-checking, file-stream management, etc. The core idea and functionality really is this simple and the code is < 400 lines, because such is simplicity the One Time Pad cipher !
 
-I hope you find joy and purpose in using or modifying this software just as I did developing it.
+###### I hope you find joy and purpose in using or modifying this software just as I did developing it.
