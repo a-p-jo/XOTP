@@ -5,17 +5,21 @@ A one-time pad is defined as "an encryption technique that cannot be cracked, bu
 XOTP is an implementation of this , written in C, that uses the bitwise Exclusive-OR (XOR) to combine the bytes of the plaintext with those of the key. 
 
 ### Compiling
-On a UNIX-like system , do the following in a Terminal : 
 
-1. `curl https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/main.c > main.c`
-2. `curl https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/otp.h > otp.h`
-3. `cc main.c -o xotp`
+**Windows** requires you install a compiler/SDK and if you do not know how, it is best that you download the .exe from the release.
+For a  UNIX-like OS, the below should work.
+
+On macOS , compiling needs xcode utilities, installed with `xcode-select --install`.
+
+In a Terminal : 
+
+1. `curl -O https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/main.c` or `wget https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/main.c`
+2. `curl -O https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/otp.h` or `wget https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/otp.h`
+3. `cc main.c -o xotp` 
 
 You can then execute XOTP from the current working directory with `./xotp` or from elsewhere with `/.../xotp` where `/...` is the absolute file path to XOTP.
 
-Note : On macOS , the above will require xcode command line utilities, which can be installed with `xcode-select --install`.
-
-On windows, this requires you to install a compiler/SDK and if you do not know how to compile already, it is better that you download the executable from the releases.
+Note : 
 
 ### Usage
 
