@@ -24,7 +24,8 @@
 // Configurable defaults :
 #define KEY_FILE_SUFFIX ".key" // extension added to filename for keyfile generated for encryption (if own pad is not supplied)
 #define ENCRYPTED_FILE_SUFFIX ".otp" // extension added to filename for encrypted file generated
-#define LENGTH_OF_ENCRYPTION_SUFFIX 4 // number of letters removed from filename for output file when decrypting a file  
+#define LENGTH_OF_ENCRYPTION_SUFFIX 4 // number of letters removed from filename for output file when decrypting a file
+#define UNIX_RANDOM_DEVICE "/dev/urandom"
 
 // for clairty , renamed the 8-bit (1-byte) block as a byte.
 typedef uint8_t byte;
@@ -104,12 +105,11 @@ void generate_keys(char * filename)
             */
 
             #ifdef UNIX
-            FILE * urandom = fopen("/dev/urandom","rb");
+            FILE * urandom = fopen(UNIX_RANDOM_DEVICE,"rb");
 
             if(urandom != NULL)
             {
                 fread(key_bytes,sizeof(*key_bytes),buffer_size,urandom);
-                printf("Used /dev/urandom\n");
                 fclose(urandom);
             }
             else
