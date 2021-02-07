@@ -6,13 +6,32 @@
 
 XOTP is an implementation of this , written in C, that uses the bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key. 
 
+### Usage
+Once you have downloaded from releases or compiled from source , the below will help you use XOTP.
+
+XOTP takes commands in the format : `xotp mode sourcefile keyfile` . 
+
+The mode is `e` or `d` stand for encryption or decryption. So to decrypt one would use `xotp d sourcefile keyfile`.
+
+When encrypting, the `keyfile` argument is *optional*, and if left blank, XOTP automatically generates a key and saves it as `sourcefile.key`. You need only specify a `keyfile` while encrypting  if you intentionally wish to use a *specific , pre-determined* keyfile. If you do so, [do not reuse it](https://crypto.stackexchange.com/a/108/82847).
+
+XOTP outputs the encrypted file as `sourcefile.otp` so `hello.txt` becomes `hello.txt.otp` , just like with [GPG](https://en.wikipedia.org/wiki/GNU_Privacy_Guard). Hence, while decrypting, the *last four* letters are **removed** from the filename of the file entered. All such defaults can be easily changed by changing the values of the macros in the source code and re-compiling. 
+
 ### Compiling
+Compiling is not necessary, you can always download from the release. If your OS is not supported, the released binary does not work for you, you want to modify the source code, or some other reason, the below will help you compile XOTP yourself.
 
-**Windows** requires you install a compiler/SDK and if you do not know how, it is best that you download the .exe from the release.
+- **Windows (7+):**
+1. Download](https://minhaskamal.github.io/DownGit/#/home?url=https:%2F%2Fgithub.com%2Fa-p-jo%2FXOTP%2Ftree%2Fmain%2FSource) the source files, if zipped , unzip them.
+2. Download and install [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019) or [Visual Studio](https://visualstudio.microsoft.com/downloads/#visual-studio-community-2019).
+3. Search for in start menu and run "`x64 Native Tools Command Prompt for VS 2019`. 
+4. Use `cd` in the command prompt to navigate to the folder contaning the source files. Example : `cd c:\Users\YOUR_USERNAME\Downloads\Source`
+5. Do : `cl main.c /link /out:xotp.exe`. If successful , this wil compile the source files to create `xotp.exe` in the file containing the source.
 
-For a  [UNIX-like](https://en.wikipedia.org/wiki/Unix-like) OS, the below should work.
+You can now execute XOTP from the [current directory](https://en.wikipedia.org/wiki/Working_directory) with `xotp` or from elsewhere with `c:\...\xotp` where `c:\...` is the [absolute file path](https://en.wikipedia.org/wiki/Path_%28computing%29#Absolute_and_relative_paths) to XOTP. 
 
-On macOS , compiling needs [xcode utilities](https://developer.apple.com/library/archive/technotes/tn2339/_index.html), installed with `xcode-select --install`.
+- [**UNIX-like OS :**](https://en.wikipedia.org/wiki/Unix-like)
+
+Note : On macOS , compiling needs [xcode utilities](https://developer.apple.com/library/archive/technotes/tn2339/_index.html), installed with `xcode-select --install`.
 
 In a terminal, Do : 
 
@@ -22,17 +41,7 @@ or `wget https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/main.c`
 or `wget https://raw.githubusercontent.com/a-p-jo/XOTP/main/Source/otp.h`
 3. `cc main.c -o xotp` 
 
-You can then execute XOTP from the [current directory](https://en.wikipedia.org/wiki/Working_directory) with `./xotp` or from elsewhere with `/.../xotp` where `/...` is the [absolute file path](https://en.wikipedia.org/wiki/Path_%28computing%29#Absolute_and_relative_paths) to XOTP. 
-
-### Usage
-
-XOTP takes commands in the format : `xotp mode sourcefile keyfile` . 
-
-The mode is `e` or `d` stand for encryption or decryption. So to decrypt one would use `xotp d sourcefile keyfile`.
-
-When encrypting, the `keyfile` argument is *optional*, and if left blank, XOTP automatically generates a key and saves it as `sourcefile.key`. You need only specify a `keyfile` while encrypting  if you intentionally wish to use a *specific , pre-determined* keyfile. If you do so, [do not reuse it](https://crypto.stackexchange.com/a/108/82847).
-
-XOTP outputs the encrypted file as `sourcefile.otp` so `hello.txt` becomes `hello.txt.otp` , just like with [GPG](https://en.wikipedia.org/wiki/GNU_Privacy_Guard). Hence, while decrypting, the *last four* letters are **removed** from the filename of the file entered. All such defaults can be easily changed by changing the values of the macros in the source code and re-compiling. 
+You can now execute XOTP from the [current directory](https://en.wikipedia.org/wiki/Working_directory) with `./xotp` or from elsewhere with `/.../xotp` where `/...` is the [absolute file path](https://en.wikipedia.org/wiki/Path_%28computing%29#Absolute_and_relative_paths) to XOTP. 
 
 ### Advantages and Disadvantages
 - The advantage is that given truly random bytes in the key, and the key kept secret and never reused, it is truly ***impossible*** to break even with *infinite* compute power and also offers *perfect secrecy*, i.e., looking at the encrypted file says nothing about the original file beyond file size.
