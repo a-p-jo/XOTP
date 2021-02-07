@@ -1,7 +1,7 @@
 #include "otp.h"
 
-/* Encryption : otp e plainfile (argc >= 3) OR otp e plainfile keyfile (argc >= 4)
- * Decryption : otp d cipherfile keyfile (argc >= 4)
+/* Encryption : xotp e plainfile (argc >= 3) OR otp e plainfile keyfile (argc >= 4)
+ * Decryption : xotp d cipherfile keyfile (argc >= 4)
 */
 
 int main(int argc, char * argv[])
