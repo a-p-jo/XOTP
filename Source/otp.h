@@ -2,9 +2,11 @@
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 #define UNIX //"/dev/urandom" will be used for pad generaion
 
-#elif defined _WIN32
+#elif defined _MSC_VER
 #define WINDOWS // rand_s() will be used for pad generation
 #define _CRT_RAND_S 
+#define _CRT_SECURE_NO_WARNINGS
+#define _CRT_NONSTDC_NO_WARNINGS
 // as per https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/rand-s?view=msvc-160 
 // this macro must be defined to use srand() from stdlib.h
 
@@ -115,7 +117,7 @@ void generate_keys(char * filename)
             }
             else
             {
-                printf("Failed : Error opening /dev/urandom.\n");
+                printf("Failed : Error opening %s.\n",UNIX_RANDOM_DEVICE);
                 free(file_bytes);
                 free(key_bytes);
                 fclose(keyfile);
@@ -125,16 +127,18 @@ void generate_keys(char * filename)
             #endif
 
            #if defined (WINDOWS) || (OTHER)
-           uint64_t raw;
+           unsigned int raw; // rand_s(usinged int *) , i.e, argument must be an 'unsigned int *' ONLY 
 
            #ifdef OTHER
+           printf("OS is not Unix/Windows : UNSAFE stdlib rand() used to generate key !\n");
+           uint32_t raw; // RAND_MAX is no bigger than 32-bit signed int size, and rand() always returns a +ve number so it can be unsigned 
            srand(time(NULL)); // seed rand() with time now
            #endif
 
            for(size_t i = 0; i < buffer_size; i++ ) // generate as many random keys as bytes in buffer
             {
                 #ifdef WINDOWS
-                rand_s(&raw);                
+                rand_s(&raw);              
                 #endif
 
                 #ifdef OTHER
@@ -149,7 +153,7 @@ void generate_keys(char * filename)
                 fclose(keyfile);
             else
             {   // not all bytes written to file, then print error, free buffer and key buffer , fclose the file and delete it, exit with -1         
-                printf("Failed : Error writing required number of bytes to keyfile.\n");
+                printf("Failed : Error writing all the  bytes to keyfile.\n");
                 free(file_bytes);
                 free(key_bytes);
                 fclose(keyfile);
@@ -161,7 +165,7 @@ void generate_keys(char * filename)
         else
         {
             // file could not be openend to write , then free the buffer and key buffer and exit with -1
-            perror("Failed : Error opening a keyfile ");
+            perror("Failed : Error opening keyfile ");
             free(file_bytes);
             free(key_bytes);
             exit(-1);
@@ -170,7 +174,7 @@ void generate_keys(char * filename)
     }
     else
     {
-        printf("Failed : Error allocating buffer for key bytes.\n");
+        printf("Failed : Error allocating buffer for key.\n");
         exit(-1);
     }
     
@@ -190,7 +194,7 @@ void buffer_keys(char * filename)
             else
             {
                 // if couldn't read all bytes , print the error, free the buffer and exit with -1
-                printf("Failed : Error Reading Key.\n");
+                printf("Failed : Error reading all the bytes from keyfile.\n");
                 free(file_bytes);
                 free(key_bytes);
                 fclose(file);
@@ -200,7 +204,7 @@ void buffer_keys(char * filename)
         else
         {
             // if malloc fails,print error, close the file and exit with -1
-            printf("Failed : Memory Allocation Error.\n");
+            printf("Failed : Error allocating buffer for key.\n");
             free(file_bytes);
             fclose(file);
             exit(-1);
@@ -209,7 +213,7 @@ void buffer_keys(char * filename)
     else
     {
         // keyfile could not be opened to read , then print error , free the file buffer, close the key file.
-        perror("Failed ");
+        perror("Failed : Error opening keyfile ");
         free(file_bytes);
         fclose(file);
         exit(-1);
@@ -255,7 +259,7 @@ void cipher(char * filename)
             else
             {
                 // couldn't complete write : print error, free pending buffer , close the file and delete it , exit with -1
-                printf("Failed : Error writing %s data.\n", (encrypting == YES) ? "encrypted" : "decrypted");
+                printf("Failed : Error writing all the %s data to file.\n", (encrypting == YES) ? "encrypted" : "decrypted");
 
                 free(cipher_bytes);
                 fclose(cipherfile);
@@ -267,7 +271,7 @@ void cipher(char * filename)
         else
         {
             // coldn't allocate memeory : print error, free buffers, close file and remove it
-            printf("Failed : Memory Allocation Error.\n");
+            printf("Failed : Error allocating buffer for %s data.\n", (encrypting == YES) ? "encrypted" : "decrypted");
             free(file_bytes);
             free(key_bytes);
             fclose(cipherfile);
@@ -278,10 +282,9 @@ void cipher(char * filename)
     }
     else
     {   // couldn't open file to save data : print error , clear buffers and exit with -1
-        perror("Failed ");
+        printf("Failed : Error opening %s file.\n", (encrypting == YES) ? "encrypted" : "decrypted");
         free(file_bytes);
         free(key_bytes);
         exit(-1);
-    }
-    
+    }    
 }
