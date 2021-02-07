@@ -22,8 +22,8 @@ Compiling is not necessary, you can always download from the release. If your OS
 
 - **Windows (7+):**
 1. [Download](https://minhaskamal.github.io/DownGit/#/home?url=https:%2F%2Fgithub.com%2Fa-p-jo%2FXOTP%2Ftree%2Fmain%2FSource) the source files, if zipped , unzip them.
-2. Download and install [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019) or [Visual Studio](https://visualstudio.microsoft.com/downloads/#visual-studio-community-2019).
-3. Search for in start menu and run "`x64 Native Tools Command Prompt for VS 2019`". 
+2. Download and install [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019) or [Visual Studio](https://visualstudio.microsoft.com/downloads/#visual-studio-community-2019). Build tools are smaller and have everything we will need here, so it is suggested to use them.
+3. Search for in start menu and run "`x64 Native Tools Command Prompt...`". Use `Developer Command Prompt...` if making for 32-bit Windows* Otherwise, It's important to use x64 tools because *32-bit will fail to encrypt/decrypt files > ~660 MB.*
 4. Use `cd` in the command prompt to navigate to the folder contaning the source files. Example : `cd c:\Users\YOUR_USERNAME\Downloads\Source`
 5. Do : `cl main.c /link /out:xotp.exe`. If successful , this wil compile the source files to create `xotp.exe` in the file containing the source.
 
