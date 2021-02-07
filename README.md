@@ -60,7 +60,7 @@ On a system that is neither , XOTP defaults to the C standard library's `rand()`
 ### How it Works
 A simplification of the tasks carried out by XOPT is :
 
-1. XOPT determines the size of the file in bytes given to encrypt, by calling `ftell()` after moving to the end of the file.
+1. XOTP determines the size of the file in bytes given to encrypt, by calling `ftell()` after moving to the end of the file.
 
 2. The entire file is buffered in memory in an array of bytes (`unint8_t`). This type of array allows access to each byte and buffering makes it much faster than querying from disk byte-by-byte.
 
