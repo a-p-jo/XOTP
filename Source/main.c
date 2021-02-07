@@ -1,7 +1,7 @@
 #include "otp.h"
 
-/* Encryption : ./otp e plainfile (argc >= 3) OR ./otp e plainfile keyfile (argc >= 4)
- * Decryption : ./otp d cipherfile keyfile (argc >= 4)
+/* Encryption : otp e plainfile (argc >= 3) OR otp e plainfile keyfile (argc >= 4)
+ * Decryption : otp d cipherfile keyfile (argc >= 4)
 */
 
 int main(int argc, char * argv[])
@@ -40,7 +40,7 @@ int main(int argc, char * argv[])
                     }
                     else
                     {
-                        printf("Failed : Memory Allocation Error.\n");
+                        printf("Failed : Error buffering filename.\n");
                         free(file_bytes);
                         exit(-1);
                     }
@@ -62,7 +62,7 @@ int main(int argc, char * argv[])
         }
         else
         {
-            perror("Failed ");
+            perror("Failed : Error opening source file ");
             exit(-1);
         }
     }
