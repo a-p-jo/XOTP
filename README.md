@@ -15,7 +15,7 @@ The mode is `e` or `d` stand for encryption or decryption. So to decrypt one wou
 
 When encrypting, the `keyfile` argument is *optional*, and if left blank, XOTP automatically generates a key and saves it as `sourcefile.key`. You need only specify a `keyfile` while encrypting  if you intentionally wish to use a *specific , pre-determined* keyfile. If you do so, [do not reuse it](https://crypto.stackexchange.com/a/108/82847).
 
-XOTP outputs the encrypted file as `sourcefile.otp` so `hello.txt` becomes `hello.txt.otp` , just like with [GPG](https://en.wikipedia.org/wiki/GNU_Privacy_Guard). Hence, while decrypting, the *last four* letters are **removed** from the filename of the file entered. All such defaults can be easily changed by changing the values of the macros in the source code and re-compiling. 
+XOTP outputs the encrypted file as `sourcefile.xotp` so `hello.txt` becomes `hello.txt.xotp` , just like with [GPG](https://en.wikipedia.org/wiki/GNU_Privacy_Guard). Hence, while decrypting, the *last five* letters are **removed** from the filename of the file entered. All such defaults can be easily changed by changing the values of the macros in the source code and re-compiling. 
 
 ### Compiling
 Compiling is not necessary, you can always download from the release. If your OS is not supported, the released binary does not work for you, you want to modify the source code, or some other reason, the below will help you compile XOTP yourself.
@@ -68,8 +68,8 @@ A simplification of the tasks carried out by XOPT is :
 
 4. If encrypting and a keyfile is given, it is buffered to memory. Otherwise a key buffer as big as the file composed of random bytes is generated and saved to a file with the given file's filename + a suffix , by default `".key"`. This generation is performed using `/dev/urandom` in UNIX-like systems , `rand_s()` in Windows and `stdlib`'s `srand()` and `rand()` in any other platform. If decrypting, the keyfile is necessary and is likewise buffered. 
 
-5. Another buffer is generated consisting of the XOR of all the bytes from the file and the key buffers. This buffer is saved either with the suffix `".otp"` added to the original filename (if encrypting) or with the last 4 characters of the filename removed (if decrypting). This is thus either the ciphertext or the plaintext !
+5. Another buffer is generated consisting of the XOR of all the bytes from the file and the key buffers. This buffer is saved either with the suffix `".xotp"` added to the original filename (if encrypting) or with the last 4 characters of the filename removed (if decrypting). This is thus either the ciphertext or the plaintext !
 
 There is complexity , but those are merely details of implementation, such as memory-management , error-checking, file-stream management, etc. The core idea and functionality really is this simple and the code is < 400 lines, because such is simplicity the One Time Pad cipher !
 
-###### I hope you find joy and purpose in using or modifying this software just as I did developing it.
+###### I hope you find joy and purpose in using or modifying this Free software just as I did developing it.
