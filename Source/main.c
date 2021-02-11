@@ -27,30 +27,47 @@ int main(int argc, char * argv[])
             {
                 encrypting = YES;
 
-                if(argc == 3)
-                {
-                    char * filename = duplicate_str_by_value(argv[2]);
-                    if(filename != NULL)
-                    {
-                        generate_keys(filename);
-                        free(filename);
-                        cipher(argv[2]);
+                char * filename_copy_for_cipher = duplicate_str_by_value(argv[2]);
+                // v1.02 : As filename strcat'd with extension , malloc sufficient buffer instead of trusting argv[2] to have space
 
-                        printf("Encryption Successful.\n");
+                if(filename_copy_for_cipher != NULL)
+                {
+                    if(argc == 3)
+                    {
+                        char * filename_copy_for_generate_keys = duplicate_str_by_value(argv[2]);
+
+                        if(filename_copy_for_generate_keys != NULL)
+                        {
+                            generate_keys(filename_copy_for_generate_keys);
+                            free(filename_copy_for_generate_keys);
+
+                            cipher(filename_copy_for_cipher);
+                            free(filename_copy_for_cipher);
+
+                            printf("Encryption Successful.\n");
+                        }
+                        else
+                        {
+                            printf("Failed : Error buffering filename for generating keyfile name.\n");
+                            free(file_bytes);
+                            exit(-1);
+                        }
                     }
                     else
                     {
-                        printf("Failed : Error buffering filename.\n");
-                        free(file_bytes);
-                        exit(-1);
+                        buffer_keys(argv[3]);
+                        cipher(argv[2]);
+                        free(filename_copy_for_cipher);
+                        printf("Encryption Successful.\n");
                     }
                 }
                 else
                 {
-                    buffer_keys(argv[3]);
-                    cipher(argv[2]);
-                    printf("Encryption Successful.\n");
+                    printf("Failed : Error buffering filename for generating cipherfile name.\n");
+                    free(file_bytes);
+                    exit(-1);
                 }
+                
             }
             else
             {               
