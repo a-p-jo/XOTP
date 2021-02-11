@@ -1,4 +1,4 @@
-// ID the environment 
+/ ID the environment 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 #define UNIX //"/dev/urandom" will be used for pad generaion
 
@@ -26,9 +26,10 @@
 
 // Configurable defaults :
 #define KEY_FILE_SUFFIX ".key" // extension added to filename for keyfile generated for encryption (if own pad is not supplied)
-#define ENCRYPTED_FILE_SUFFIX ".otp" // extension added to filename for encrypted file generated
-#define LENGTH_OF_ENCRYPTION_SUFFIX 4 // number of letters removed from filename for output file when decrypting a file
-#define UNIX_RANDOM_DEVICE "/dev/urandom"
+#define ENCRYPTED_FILE_SUFFIX ".xotp" // extension added to filename for encrypted file generated (changed from .otp to .xotp in v1.02 )
+#define LENGTH_OF_ENCRYPTION_SUFFIX 5 // number of letters removed from filename for output file when decrypting a file
+#define UNIX_RANDOM_DEVICE "/dev/urandom" // can be changed ( say, to /dev/random) if required
+#define NULL_TERMINATOR_SIZE 1 // '\0' has size 1 byte
 
 // for clairty , renamed the 8-bit (1-byte) block as a byte.
 typedef uint8_t byte;
@@ -47,7 +48,8 @@ char * duplicate_str_by_value(char * source)
     // returns pointer to a malloced string which is same as source by value but differs in memory location
     // required to save/buffer cmdln arguments because string.h functions modify strings in-place , destroying it's original value.
 
-    char * dest = malloc(strlen(source)+1); // dest MUST later be freed !
+    char * dest = malloc(strlen(source) + LENGTH_OF_ENCRYPTION_SUFFIX + NULL_TERMINATOR_SIZE); // Creates enough space for us to later strcat in the extension
+    // dest MUST later be freed !
 
     if(dest != NULL)
     {
@@ -189,7 +191,8 @@ void buffer_keys(char * filename)
 
         if(key_bytes != NULL)
         {
-            if((fread(key_bytes,sizeof(*key_bytes),buffer_size,file)) == buffer_size); // store the entire file in the buffer
+            if((fread(key_bytes,sizeof(*key_bytes),buffer_size,file)) == buffer_size) // store the entire file in the buffer
+                fclose(file); // added in v1.02  after running under valgrind
 
             else
             {
