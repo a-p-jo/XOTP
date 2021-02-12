@@ -1,4 +1,4 @@
-/ ID the environment 
+// ID the environment 
 #if defined (__unix__) || (defined (__APPLE__) && defined (__MACH__))
 #define UNIX //"/dev/urandom" will be used for pad generaion
 
