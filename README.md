@@ -6,6 +6,11 @@
 
 XOTP is an implementation of this , written in C, that uses the bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key. 
 
+### Important !
+XOTP currently is *very* alpha. It buffers the *entire* file , pad and ciphertext. This is *very* memeory inefficient and limits it. This is a *known* problem, and a fix will come *soon*. This means that XOTP will use 3x the size of your files at peak memory usage , which restrics encrypting large files in 32-bit or low-memory situations for *no good reason* why smaller buffering can't be used. 
+
+Feel free to submit a patch fixing this if you can !
+
 ### Usage
 Once you have downloaded from releases or compiled from source , the below will help you use XOTP.
 
@@ -23,7 +28,7 @@ Compiling is not necessary, you can always download from the release. If your OS
 - **Windows :**
 1. [Download](https://minhaskamal.github.io/DownGit/#/home?url=https:%2F%2Fgithub.com%2Fa-p-jo%2FXOTP%2Ftree%2Fmain%2FSource) the source files, if zipped , unzip them.
 2. Download and install [Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2019) or [Visual Studio](https://visualstudio.microsoft.com/downloads/#visual-studio-community-2019). Build tools are smaller and have everything we will need here, so it is suggested to use them. If running anything older than Windows 7 SP1, get [Visual Studio 2010](https://docs.microsoft.com/en-gb/visualstudio/releasenotes/vs2010-version-history) or older, which has not been tested but *should work*, but steps to compile will likely differ from those given below.
-3. Search for in start menu and run "`x64 Native Tools Command Prompt...`". Use "`Developer Command Prompt...`" *only if* compiling for *32-bit* Windows. Otherwise, use x64 tools; *32-bit will fail to encrypt/decrypt files > ~660 MB.*
+3. Search for in start menu and run "`x64 Native Tools Command Prompt...`". Use "`Developer Command Prompt...`" if compiling for 32-bit Windows.
 4. Use `cd` in the command prompt to navigate to the folder contaning the source files. Example : `cd c:\Users\YOUR_USERNAME\Downloads\Source`
 5. Do : `cl main.c /link /out:xotp.exe`. If successful , this wil compile the source files to create `xotp.exe` in the file containing the source.
 
@@ -46,7 +51,7 @@ You can now execute XOTP from the [current directory](https://en.wikipedia.org/w
 ### Advantages and Disadvantages
 - The advantage is that given truly random bytes in the key, and the key kept secret and never reused, it is truly ***impossible*** to break even with *infinite* compute power and also offers *perfect secrecy*, i.e., looking at the encrypted file says nothing about the original file beyond file size.
 
-- The disadvantage is that the usage of memory and storage escalates quickly, which may make secure transfer of the key harder. At maximum, memory/storage used is about 3x the size of the input file. This is because we must store the file, the pad as big as the file , and the resultant of combining the file and the pad , also as big as the file itself. This means it can be relatively slower , due to time required for random generation and [I/O intensiveness](https://en.wikipedia.org/wiki/I/O_bound), making it proportionally less practical for larger file sizes.
+- The disadvantage is the large storage space used, which may also make secure key transport hard. This is because the pad/key has to be as big as the file . It can be relatively slower due to slowness of random generation and [I/O intensiveness](https://en.wikipedia.org/wiki/I/O_bound), making it less practical for larger file sizes. 
 
 ### Conditions and Security :
 - True randomness is critical . On a UNIX-like system (Linux, macOS, BSD...) , this program uses `/dev/urandom` to generate the pad , which is adequate, and although `/dev/random` is arguable *more* "truly random", `/dev/urandom` is [not *bad*](https://www.2uo.de/myths-about-urandom/). On Windows, it uses `rand_s()` , which Microsoft states to have cryptographically secure randomness. 
@@ -62,14 +67,14 @@ A simplification of the tasks carried out by XOPT is :
 
 1. XOTP determines the size of the file in bytes given to encrypt, by calling `ftell()` after moving to the end of the file.
 
-2. The entire file is buffered in memory in an array of bytes (`unint8_t`). This type of array allows access to each byte and buffering makes it much faster than querying from disk byte-by-byte.
+2. The entire file is buffered in memory in an array of bytes (`unint8_t`). This type of array allows access to each byte and buffering makes it much faster than querying from disk byte-by-byte. *This process is inefficient in memory usage and must be changed.*
 
 3. Then, depending on whether encryption or decryption is required, a global variable is assigned a corresponding value.
 
-4. If encrypting and a keyfile is given, it is buffered to memory. Otherwise a key buffer as big as the file composed of random bytes is generated and saved to a file with the given file's filename + a suffix , by default `".key"`. This generation is performed using `/dev/urandom` in UNIX-like systems , `rand_s()` in Windows and `stdlib`'s `srand()` and `rand()` in any other platform. If decrypting, the keyfile is necessary and is likewise buffered. 
+4. If encrypting and a keyfile is given, it is buffered to memory.*This process is inefficient in memory usage and must be changed.* Otherwise a key buffer as big as the file composed of random bytes is generated and saved to a file with the given file's filename + a suffix , by default `".key"`. This generation is performed using `/dev/urandom` in UNIX-like systems , `rand_s()` in Windows and `stdlib`'s `srand()` and `rand()` in any other platform. If decrypting, the keyfile is necessary and is likewise buffered. 
 
-5. Another buffer is generated consisting of the XOR of all the bytes from the file and the key buffers. This buffer is saved either with the suffix `".xotp"` added to the original filename (if encrypting) or with the last 4 characters of the filename removed (if decrypting). This is thus either the ciphertext or the plaintext !
+5. Another buffer is generated consisting of the XOR of all the bytes from the file and the key buffers. *This process is inefficient in memory usage and must be changed.* This buffer is saved either with the suffix `".xotp"` added to the original filename (if encrypting) or with the last 4 characters of the filename removed (if decrypting). This is thus either the ciphertext or the plaintext !
 
-There is complexity , but those are merely details of implementation, such as memory-management , error-checking, file-stream management, etc. The core idea and functionality really is this simple and the code is < 400 lines, because such is simplicity the One Time Pad cipher !
+There is other complexity , but those are details of implementation, such as memory-management , error-checking, file-stream management, etc. The core idea and functionality really is this simple and the code is < 400 lines (and can be much simpler once buffering is tamed to be effecient).
 
 ###### I hope you find joy and purpose in using or modifying this Free software just as I did developing it.
