@@ -7,7 +7,7 @@
 XOTP is an implementation of this , written in C, that uses the bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key. 
 
 ### Important !
-XOTP is alpha. At the moment it fully buffers the file , pad and ciphertext. This is a *known* problem, and a fix is coming *soon* in the form of a **complete rewrite** in v2.
+XOTP is imperfect. At the moment it fully buffers the file , pad and ciphertext. This is a *known* inefficiency, and a fix is coming *soon* in the form of a **complete rewrite** in v2.
 
 ### Usage
 Once you have downloaded from releases or compiled from source , the below will help you use XOTP.
