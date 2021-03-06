@@ -7,9 +7,7 @@
 XOTP is an implementation of this , written in C, that uses the bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key. 
 
 ### Important !
-XOTP currently is *very* alpha. It buffers the *entire* file , pad and ciphertext. This is *very* memeory inefficient and limits it. This is a *known* problem, and a fix will come *soon*. This means that XOTP will use 3x the size of your files at peak memory usage , which restrics encrypting large files in 32-bit or low-memory situations for *no good reason* why smaller buffering can't be used. 
-
-Feel free to submit a patch fixing this if you can !
+XOTP is alpha. At the moment it fully buffers the file , pad and ciphertext. This is a *known* problem, and a fix is coming *soon* in the form of a **complete rewrite** in v2.
 
 ### Usage
 Once you have downloaded from releases or compiled from source , the below will help you use XOTP.
