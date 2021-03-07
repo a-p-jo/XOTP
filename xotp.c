@@ -1,7 +1,7 @@
-#include <stdio.h>  // printf() , fprintf(), FILE * , fopen(), fclose(), stdin , stdout, stderr, fread(), fwrite(), fflush()
+#include <stdio.h>  // fprintf(), FILE * , fopen(), fclose(), stdin , stdout, stderr, fread(), fwrite()
 #include <stdint.h> // uint64_t , uint_fast8_t
 #include <string.h> // strcpy() , strcat(), strcmp() , strerror()
-#include <stdlib.h> // malloc() , free(), exit() , ferror()
+#include <stdlib.h> // malloc() , free(), exit() , ferror(), feof()
 #include <errno.h>  // errno
 
 /* Preprocessor checks to identify OS, to use OS-provided random numbers if possible.
