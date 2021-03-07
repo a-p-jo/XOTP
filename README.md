@@ -32,7 +32,7 @@ Options :
 The *idea* behind arguments to XOTP is "*control by implication*".
 Explicit commands are also possible; the idea is to equip the user to imply more than he types.
 
-So, invokations can be as small as `xotp e` . This implies that xotp will read from stdin , which it will encrypt by generating a pad of appropriate size saved to `pad.pad` (in the cwd) , and the encrypted data will be written to stdout.
+So, invocations can be as small as `xotp e` . This implies that xotp will read from stdin , which it will encrypt by generating a pad of appropriate size saved to `pad.pad` (in the cwd) , and the encrypted data will be written to stdout.
 
 Or, invokations can be as verbose as `xotp e -f foo -p pad -o bar`. Here, "`foo`" will be encrypted to "`bar`", with the pad "`pad`". If "`pad`" already exists, XOTP attempts to read it as the pad, if it does not, it generates a pad and saves it to "`pad`".
 
