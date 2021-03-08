@@ -10,9 +10,6 @@
  * Else    : and rand() on "other" systems (portable, std C).
  */
 #if defined _WIN32
-	#if defined _MSC_VER
-	#define WIN
-
 	#ifdef _MSC_VER
 		#define _CRT_SECURE_NO_WARNINGS
 		#define WIN
