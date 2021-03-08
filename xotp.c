@@ -141,12 +141,6 @@ void init(char ** argv)
 		main(1,NULL); // Go to main's else case to print usage.
 	}
 
-	/* Vars to save index of options if found in argv 
-	 * f : index for option "-f" or file.
-	 * p : index for option "-p" or pad.
-	 * o : index for option "-o" or output
-	 */
-
 	/* Search argv for 1st occurrence of options position-independency.
 	 * NOTE : argv[0] and argv[1] are reserved, search argv[2] onwards.
 	 */
@@ -334,7 +328,7 @@ size_t getpad(byte * buf,size_t bytes, FILE * randf)
 				return bytes;
 			else
 				return 0;
-		#elif define NIX
+		#elif defined NIX
 			return fread(buf,1,bytes,randf);
 		#else
 			size_t idx;
@@ -426,10 +420,6 @@ int main(int argc, char ** argv)
 	}
 	else
 	{
-		/* If user needs help or args are incomplete, invalid or insufficient, goto bad_args.
-		 * Give user basic structure of options and their arguments.
-		 * Allow user to learn in detail of all options.
-		 */
 
 		fprintf(stderr,
 		"Invalid arguments, see usage below for help.\n\n"
@@ -440,7 +430,7 @@ int main(int argc, char ** argv)
 		"\tDecrypts \"foo.xotp\" with pad \"foo.pad\" and saves to \"foo\"\n"
 		"\n"
 		"Detailed Usage :\n"
-		"-> xotp [command : e or d] [(optional) options] [(optional) option's argument] ...\n"
+		"-> xotp [command : e or d] [(optional) option] [(optional) option's argument] ...\n"
 		"\n"
 		"Options :\n"
 		"\n"
