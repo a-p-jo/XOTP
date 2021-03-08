@@ -8,7 +8,7 @@ XOTP is an implementation of this , written in C, that uses the bitwise [Exclusi
 
 ### Usage 
 
-As XOTP itself will tel you :
+As XOTP itself will tell you :
 
 ```
 -> xotp [command : e or d] [(optional) options] [(optional) option's argument] ...
