@@ -11,7 +11,7 @@ XOTP is an implementation of this , written in C, that uses the bitwise [Exclusi
 As XOTP itself will tell you :
 
 ```
--> xotp [command : e or d] [(optional) options] [(optional) option's argument] ...
+-> xotp [command : e or d] [(optional) option] [(optional) option's argument] ...
 
 Options :
 
