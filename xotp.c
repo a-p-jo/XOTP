@@ -10,12 +10,16 @@
  * Else    : and rand() on "other" systems (portable, std C).
  */
 #if defined _WIN32
+	#if defined _MSC_VER
 	#define WIN
 
 	#ifdef _MSC_VER
 		#define _CRT_SECURE_NO_WARNINGS
+		#define WIN
+	#else
+		#error "REQUIRED : Microsoft C compiler, for RtlGenRandom() on Windows.\n" 
 	#endif
-	
+
 #elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
 	#define NIX
 #else
