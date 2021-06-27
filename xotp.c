@@ -1,20 +1,20 @@
 #include <stdio.h>  // fprintf(), FILE * , fopen(), fclose(), stdin , stdout, stderr, fread(), fwrite()
 #include <stdint.h> // uint64_t , uint_fast8_t
 #include <string.h> // strcpy() , strcat(), strcmp() , strerror()
-#include <stdlib.h> // malloc() , free(), exit() , ferror(), feof()
+#include <stdlib.h> // malloc() , free(), exit() , ferror(), feof(), srand(), rand()
 #include <errno.h>  // errno
 
 /* Preprocessor checks to identify OS, to use OS-provided random numbers if possible.
  * Windows : RtlGenRandom()
- * UNIX    : NIX_RAND_DEV (/dev/urandom by default)
- * Else    : and rand() on "other" systems (portable, std C).
+ * UNIX    : NIX_RAND_DEV ("/dev/urandom" by default)
+ * Else    : rand() on "other" systems (portable, std C, not ideal)
  */
 #if defined _WIN32
 	#ifdef _MSC_VER
 		#define _CRT_SECURE_NO_WARNINGS
 		#define WIN
 	#else
-		#error "REQUIRED : Microsoft C compiler, for RtlGenRandom() on Windows.\n" 
+		#error "REQUIRED : Microsoft C compiler, for RtlGenRandom() on Windows." 
 	#endif
 
 #elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
@@ -26,17 +26,18 @@
 
 /* Errors & their exit codes */
 #define NO_ARGS_FOR_OPTION -1
-#define FOPEN_ERR -2
-#define MALLOC_ERR -3
-#define MISSING_ARG -4
-#define MIDIO_ERR -5
+#define FOPEN_ERR 	   -2
+#define MALLOC_ERR 	   -3
+#define MISSING_ARG 	   -4
+#define MID_IO_ERR 	   -5
+#define FCLOSE_ERR         -6
 
 /* Defaults */
-#define NIX_RAND_DEV "/dev/urandom"  // Random device for getting random number on a *NIX system.
-#define DEFAULT_PAD_EXTENSION ".pad" // Used if no "-p" when encrypting, appended to "-f" arg.
-#define DEFAULT_PAD_NAME "pad"       // Used if no "-f" and no "-p" when encrypting, is used as name for pad.
-#define CLEANUP 		     // remove() files that we were writing to if writing fails.
-#define BLOCK 1048576                // Block size,  1 MiB by default.
+#define NIX_RAND_DEV 	      "/dev/urandom" /* Random device for getting random number on a UNIX/POSIX system.         */
+#define DEFAULT_PAD_EXTENSION ".pad" 	     /* Used if no "-p" when encrypting, appended to "-f" arg.	                */
+#define DEFAULT_PAD_NAME      "pad"          /* Used if no "-f" and no "-p" when encrypting, is used as name for pad.   */
+#define CLEANUP 		             /* if defined, we remove() files that we were writing to if writing fails. */
+#define BLOCK 1048576                        /* Block size for sequential file cloning,  1 MiB by default.		*/
 
 /* For readability */
 typedef uint_fast8_t byte;
@@ -47,31 +48,31 @@ typedef uint_fast8_t byte;
 
 /* Global Variables : */
 
-/* State variables */
-byte generate_pad = YES;
+/* 1. State variables */
+byte generate_pad    = YES;
 byte encrypting;
-byte writing2pad = NO;
+byte writing2pad     = NO;
 byte writing2outfile = NO;
-byte writing2defpad = NO;
+byte writing2defpad  = NO;
 
-/* Vars to save index of options if found in argv 
+/* 2. Vars to save index of command line options if found in argv 
  * f : index for option "-f" or file.
  * p : index for option "-p" or pad.
  * o : index for option "-o" or output.
  */
 int64_t f,p,o; 
 
-/* Vars for streams used */
+/* 3. Vars for streams used */
 FILE * plain, * cipher, * pad;
 
-/* Hold pointers to free that were allocated in other functions 
- * Only one is needed right now.
+/* 4. Hold pointers to free that were allocated in other functions 
+ * Only one is needed as yet.
  */
 void * tofree[1+1]; // +1 for NULL terminator.
 
-/* Functions */
+/* Functions : */
 
-/* Combine two strings into sufficiently large new string */
+/* 1. Combine two null terminated strings */
 char * combine(char * str1, char * str2)
 {
 	char * result = malloc(strlen(str1) + strlen(str2) + 1); // +1 for '\0'
@@ -84,22 +85,7 @@ char * combine(char * str1, char * str2)
 	return result;
 }
 
-/* Close pad, plain and ciper FILE*'s if they are open */
-void fcloseall(void)
-{
-	/* As our FILE*'s are global, they are initilized to NULL.
-	 * Thus, FILE * evaluates to true only on successful fopen
-	 */
-
-	if(plain)
-		fclose(plain);
-	if(pad)
-		fclose(pad);
-	if(cipher)
-		fclose(cipher);
-}
-
-/* Free as many ptrs as in void ** tofree until encountering NULL */
+/* Free as many ptrs as in tofree */
 void freeall(void)
 {
 	for(uint64_t idx = 0; tofree[idx]; idx++)
@@ -109,8 +95,6 @@ void freeall(void)
 /* A tragic exit, after a fatal error. Handles free(), fclose() & remove() as needed */
 void exunt(char ** argv,int rval)
 {
-	fcloseall();
-
 	#ifdef CLEANUP
 		if(p && writing2pad)
 			remove(argv[p+1]);
@@ -126,7 +110,7 @@ void exunt(char ** argv,int rval)
 	exit(rval);
 }
 
-/* Initialize FILE *'s by parsing command line args */
+/* Initialize FILE *'s and state vars by parsing command line args */
 void init(char ** argv)
 {
 	encrypting = !strcmp(argv[1],"e");
@@ -137,12 +121,14 @@ void init(char ** argv)
 	if(!encrypting && !decrypting)
 	{
 		fprintf(stderr,"Unrecognised argument : \"%s\".\n" 
-				"Only \"e\" and \"d\" are valid modes.\n"
-				"\n",argv[1]);
-		main(1,NULL); // Go to main's else case to print usage.
+			"Only \"e\" and \"d\" are valid modes.\n"
+			"\n",argv[1]);
+		int main(int argc,char ** argv); // Prototype for main() so below line is compiled
+		main(1,NULL); 			 // Go to main's else case to print usage.
 	}
 
 	/* Search argv for 1st occurrence of options position-independency.
+	 * Once an option is found, any subsequent occurrences are ignored.
 	 * NOTE : argv[0] and argv[1] are reserved, search argv[2] onwards.
 	 */
 	for(uint64_t idx = 2; argv[idx]; idx++)
@@ -175,7 +161,7 @@ void init(char ** argv)
 
 			if(encrypting? !plain : !cipher)
 			{
-				fprintf(stderr,"Error : Could not open \"%s\" : %s\n",fname,strerror(errno));
+				fprintf(stderr,"Error : Could not open file \"%s\" : %s\n",fname,errno? strerror(errno) : "Unknown error");
 				exit(FOPEN_ERR);
 			}
 		}
@@ -220,15 +206,13 @@ void init(char ** argv)
 			
 			if(!pad)
 			{
-				fprintf(stderr,"Error : Could not open \"%s\" : %s\n",pname,strerror(errno));
-				fcloseall();
+				fprintf(stderr,"Error : Could not open pad \"%s\" : %s\n",pname,errno? strerror(errno) : "Unknown error");
 				exit(FOPEN_ERR);
 			}
 		}
 		else
 		{
 			fprintf(stderr,"Error : No argument for option \"-p\"\n");
-			fcloseall();
 			exit(NO_ARGS_FOR_OPTION);
 		}
 	}
@@ -242,7 +226,6 @@ void init(char ** argv)
 			if(!pname)
 			{
 				fprintf(stderr,"Error : Could not malloc for pad filename.\n");
-				fcloseall();
 				exit(MALLOC_ERR);
 			}
 
@@ -252,9 +235,8 @@ void init(char ** argv)
 
 			if(!pad)
 			{
-				fprintf(stderr,"Error : Could not open \"%s\" to save pad : %s\n",pname,strerror(errno));
+				fprintf(stderr,"Error : Could not open \"%s\" to save pad : %s\n",pname,errno? strerror(errno) : "Unknown error");
 				free(pname);
-				fcloseall();
 				exit(FOPEN_ERR);
 			}
 
@@ -267,7 +249,6 @@ void init(char ** argv)
 			else
 			{
 				fprintf(stderr,"Error : No pad specified.\n");
-				fcloseall();
 				exit(MISSING_ARG);
 			}
 		}
@@ -289,7 +270,7 @@ void init(char ** argv)
 
 			if(encrypting? !cipher : !plain)
 			{
-				fprintf(stderr,"Error : Could not open \"%s\" to write output : %s\n",oname,strerror(errno));
+				fprintf(stderr,"Error : Could not open \"%s\" to write output : %s\n",oname,errno? strerror(errno) : "Unknown error");
 				o = FALSE; // exunt wont attempt remove() on -o file if o == FALSE.
 				exunt(argv,FOPEN_ERR);
 			}
@@ -308,11 +289,11 @@ void init(char ** argv)
 
 }
 
-/* Save BLOCK pad bytes to given buffer and return count of bytes saved.
+/* Save BLOCK pad bytes to given stream and return count of bytes saved.
  *
  * If we must generate pad :
  * 1. "FILE * randf" is unique to *NIX OSes; needs an fopen() + fclose() for the  random device.
- * 2. For NT platforms call RtlGenRandom(), a "microsoft function" that has no includes and generates
+ * 2. For Windows call RtlGenRandom(), a microsoft function that has no includes and generates
  *    "cryptographically secure" random bytes.
  * 3. For non-windows, non-unix platform fallback on portable rand() from stdlib.h - INSECURE !
  * 4. Then, save to pad.
@@ -333,7 +314,7 @@ size_t getpad(byte * buf,size_t bytes, FILE * randf)
 			return fread(buf,1,bytes,randf);
 		#else
 			size_t idx;
-			for( idx = 0; idx < bytes; idx++)
+			for(idx = 0; idx < bytes; idx++)
 				buf[idx] = rand() % (UINT8_MAX + 1); // Get value in range of 1 unsigned byte (0-255).
 
 			return idx;
@@ -373,7 +354,7 @@ int main(int argc, char ** argv)
 			if(ferror(from))
 			{
 				fprintf(stderr,"Error reading input : %s\n",errno? strerror(errno) : "unknown I/O error");
-				exunt(argv,MIDIO_ERR);
+				exunt(argv,MID_IO_ERR);
 			}
 
 			frd_pad = getpad(buf2, frd_frm, randf);
@@ -381,7 +362,7 @@ int main(int argc, char ** argv)
 			if(frd_pad != frd_frm)
 			{
 				fprintf(stderr, "Error getting sufficient pad data : %s\n",errno? strerror(errno) : "unknown error");
-				exunt(argv,MIDIO_ERR);
+				exunt(argv,MID_IO_ERR);
 			}
 			
 			if(generate_pad)
@@ -391,7 +372,7 @@ int main(int argc, char ** argv)
 				if(fwrt_pad != frd_frm)
 				{
 					fprintf(stderr,"Error saving pad data : %s\n",errno? strerror(errno) : "unknown I/O error");
-					exunt(argv,MIDIO_ERR);
+					exunt(argv,MID_IO_ERR);
 				}
 			}
 
@@ -403,21 +384,27 @@ int main(int argc, char ** argv)
 			if(fwrt_to != frd_frm)
 			{
 				fprintf(stderr, "Error writing output : %s\n",errno? strerror(errno) : "unknown I/O errnor");
-				exunt(argv,MIDIO_ERR);
+				exunt(argv,MID_IO_ERR);
 			}
 
 			if(feof(from))
 				break;
 		}
 
-		#ifdef NIX
-			fclose(randf);
-		#endif
-
-		fcloseall();
 		freeall();
-
-		return 0;
+		
+		int rval = 0;
+		if(fclose(to))
+		{
+			rval = FCLOSE_ERR;
+			fprintf(stderr,"Error saving output : %s\n",errno? strerror(errno) : "unknown error");
+		}
+		if(generate_pad && fclose(pad))
+		{
+			rval = FCLOSE_ERR;
+			fprintf(stderr,"Error saving pad : %s\n",errno? strerror(errno) : "unknown error");
+		}
+		exit(rval);
 	}
 	else
 	{
@@ -434,16 +421,15 @@ int main(int argc, char ** argv)
 		"-> xotp [command : e or d] [(optional) option] [(optional) option's argument] ...\n"
 		"\n"
 		"Options :\n"
-		"\n"
 		"\t1. \"-f\" : Give input file.\n"
 		"\t Without \"-f\", input is read from stdin.\n"
 		"\n"
 		"\t2. \"-p\" : Give pad file.\n"
-		"\t\t2.1 If encrypting : if the pad file exists, it is read as the pad.\n"
+		"\t\t2.1 : If encrypting : if the pad file exists, it is read as the pad.\n"
 	       	"\t\tIf not, the generated pad is saved to it.\n"
 		"\t\tWithout \"-p\" , pad is saved to the input file (if specified) with a \".pad\" extension.\n"
 		"\t\tOtherwise, it is saved to \"pad.pad\"\n"
-		"\t\t2.2 If decrypting : the pad file is read to decrypt the input.\n"
+		"\t\t2.2 : If decrypting : the pad file is read to decrypt the input.\n"
 		"\t\tWithout \"-p\", if \"-f\" is supplied, pad is read from stdin.\n"
 		"\n"
 		"\t3. \"-o\" : Give output file.\n"
