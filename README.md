@@ -1,4 +1,4 @@
-# XOTP : XOR One Time Pad v2.1.1
+# XOTP : XOR One Time Pad v2.2
 
 > "The one-time pad (OTP) is an encryption technique that cannot be cracked, but requires the use of a one-time pre-shared key the same size as, or longer than, the message being sent. In this technique, a plaintext is paired with a random secret key (also referred to as a one-time pad). Then, each bit or character of the plaintext is encrypted by combining it with the corresponding bit or character from the pad. "
 
@@ -11,7 +11,7 @@ XOTP is an implementation of this , written in C, that uses the bitwise [Exclusi
 As XOTP itself will tell you :
 
 ```
--> xotp [command : e or d] [(optional) option] [(optional) option's argument] ...
+-> xotp <command : e or d> [(optional) option] [(optional) option's argument] ...
 
 Options :
 
