@@ -1,138 +1,139 @@
-#include <stdio.h>  // fprintf(), FILE * , fopen(), fclose(), stdin , stdout, stderr, fread(), fwrite()
-#include <stdint.h> // uint64_t , uint_fast8_t
-#include <string.h> // strcpy() , strcat(), strcmp() , strerror()
-#include <stdlib.h> // malloc() , free(), exit() , ferror(), feof(), srand(), rand()
-#include <errno.h>  // errno
-
-/* Preprocessor checks to identify OS, to use OS-provided random numbers if possible.
- * Windows : RtlGenRandom()
- * UNIX    : NIX_RAND_DEV ("/dev/urandom" by default)
- * Else    : rand() on "other" systems (portable, std C, not ideal)
+/* ---------------------------
+ * Preprocessor system checks |
+ * ---------------------------
  */
-#if defined _WIN32
-	#ifdef _MSC_VER
-		#define _CRT_SECURE_NO_WARNINGS
-		#define WIN
-	#else
-		#error "REQUIRED : Microsoft C compiler, for RtlGenRandom() on Windows." 
-	#endif
+
+/* Reject compilation on freestanding or older than C99 compiler */
+#if !defined __STDC_HOSTED__ || __STDC_VERSION__ < 199901L
+	#error "Hosted C99 implementation required !"
+
+/* Identify OS/API for PRNG used in password generation */
+#elif defined _WIN32
+	#define _CRT_SECURE_NO_WARNINGS         /* Shut up, MSVC */
+	#define _WIN32_WINNT _WIN32_WINNT_WINXP /* Support XP and newer */
+	#define _CRT_RAND_S                     /* Required before #includes, see MS docs */
+	#define WIN
 
 #elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
+	#define NIX_RAND_DEV "/dev/urandom"     /* Change if you need */
 	#define NIX
 #else
+	#include <time.h> /* srand(time(0)) */
 	#define OTHER
-	#include <time.h> // time(0) , seed for srand()
 #endif
 
-/* Errors & their exit codes */
-#define NO_ARGS_FOR_OPTION -1
-#define FOPEN_ERR 	   -2
-#define MALLOC_ERR 	   -3
-#define MISSING_ARG 	   -4
-#define MID_IO_ERR 	   -5
-#define FCLOSE_ERR         -6
+/* ------------------------------------------------
+ * Dependencies on the hosted C99 standard library |
+ * ------------------------------------------------
+ */
+
+#include <stdio.h>   /* fprintf(), FILE * , fopen(), fclose(), 
+		       stdin , stdout, stderr, fread(), fwrite(), strerror()  */
+#include <stdint.h>  /* uint_fast8_t                                          */
+#include <string.h>  /* strcpy() , strcat(), strcmp()                         */
+#include <stdlib.h>  /* malloc() , free(), exit() , ferror(), feof(), srand(),
+		       rand()                                                 */
+#include <errno.h>   /* errno                                                 */
+#include <stdbool.h> /* bool, true, false                                     */
+
+
+/* ----------
+ * Constants |
+ * ----------
+ */
+
+/* main()'s exit codes */
+enum retval {
+	SUCCESS = EXIT_SUCCESS,
+	NO_ARG_FOR_OPT,
+	FOPEN_ERR,
+	MALLOC_ERR,
+	MISSING_ARG,
+	MID_IO_ERR,
+	FCLOSE_ERR
+};
 
 /* Defaults */
-#define NIX_RAND_DEV 	      "/dev/urandom" /* Random device for getting random number on a UNIX/POSIX system.         */
-#define DEFAULT_PAD_EXTENSION ".pad" 	     /* Used if no "-p" when encrypting, appended to "-f" arg.	                */
-#define DEFAULT_PAD_NAME      "pad"          /* Used if no "-f" and no "-p" when encrypting, is used as name for pad.   */
-#define CLEANUP 		             /* if defined, we remove() files that we were writing to if writing fails. */
-#define BLOCK 1048576                        /* Block size for sequential file cloning,  1 MiB by default.		*/
+#define DEFAULT_PAD_EXTENSION ".pad"    /* Used if no "-p" when encrypting, appended to "-f" arg.                  */
+#define DEFAULT_PAD_NAME      "pad"     /* Used if no "-f" and no "-p" when encrypting, is used as name for pad.   */
+#define CLEANUP 		        /* if defined, we remove() files that we were writing to if writing fails. */
+#define BUFSZ                 (1024*64) /* Block size for sequential file cloning,  64KiB by default.		   */
 
-/* For readability */
-typedef uint_fast8_t byte;
-#define YES (1)
-#define TRUE (1)
-#define NO (0)
-#define FALSE (0)
+/* -----------------
+ * Global Variables |
+ * -----------------
+ */
 
-/* Global Variables : */
+/* State variables */
+bool generate_pad    = true,
+     encrypting      = false,
+     writing2pad     = false,
+     writing2outfile = false,
+     writing2defpad  = false;
 
-/* 1. State variables */
-byte generate_pad    = YES;
-byte encrypting;
-byte writing2pad     = NO;
-byte writing2outfile = NO;
-byte writing2defpad  = NO;
-
-/* 2. Vars to save index of command line options if found in argv 
+/* Index of command line options if found in argv 
  * f : index for option "-f" or file.
  * p : index for option "-p" or pad.
  * o : index for option "-o" or output.
  */
-int64_t f,p,o; 
+size_t f,p,o; 
 
-/* 3. Vars for streams used */
-FILE * plain, * cipher, * pad;
-
-/* 4. Hold pointers to free that were allocated in other functions 
- * Only one is needed as yet.
- */
-void * tofree[1+1]; // +1 for NULL terminator.
+FILE *restrict plain, *restrict cipher, *restrict pad;
+void *restrict tofree;
 
 /* Functions : */
-
-/* 1. Combine two null terminated strings */
-char * combine(char * str1, char * str2)
+char *combine(const char *restrict str1, const char *restrict str2)
 {
-	char * result = malloc(strlen(str1) + strlen(str2) + 1); // +1 for '\0'
+	size_t len1 = strlen(str1), len2 = strlen(str2);
+	char *restrict ret = malloc(len1 + len2 + 1);
 
-	if(!result) return NULL;
-
-	strcpy(result,str1);
-	strcat(result,str2);
-
-	return result;
-}
-
-/* Free as many ptrs as in tofree */
-void freeall(void)
-{
-	for(uint64_t idx = 0; tofree[idx]; idx++)
-		free(tofree[idx]);
+	if(!ret)
+		return NULL;
+	else {
+		memcpy(ret, str1, len1);
+		memcpy(ret+len1, str2, len2);
+		ret[len1+len2] = '\0';
+		return ret;
+	}
 }
 
 /* A tragic exit, after a fatal error. Handles free(), fclose() & remove() as needed */
-void exunt(char ** argv,int rval)
+void exunt(char **argv,const enum retval rval)
 {
 	#ifdef CLEANUP
 		if(p && writing2pad)
 			remove(argv[p+1]);
 		else if(writing2defpad)
-			remove(*tofree);
+			remove(tofree);
 
 		if(o && writing2outfile)
 			remove(argv[o+1]);
 	#endif
-	
-	freeall();
-
+	free(tofree);
 	exit(rval);
 }
 
 /* Initialize FILE *'s and state vars by parsing command line args */
-void init(char ** argv)
+void init(char **argv)
 {
 	encrypting = !strcmp(argv[1],"e");
-	int decrypting = !strcmp(argv[1],"d");
+	const bool decrypting = !strcmp(argv[1],"d");
 
-	if(decrypting) generate_pad = NO;
-	
-	if(!encrypting && !decrypting)
-	{
+	if(decrypting) 
+		generate_pad = false;
+	else if(!encrypting) {
 		fprintf(stderr,"Unrecognised argument : \"%s\".\n" 
 			"Only \"e\" and \"d\" are valid modes.\n"
 			"\n",argv[1]);
-		int main(int argc,char ** argv); // Prototype for main() so below line is compiled
-		main(1,NULL); 			 // Go to main's else case to print usage.
+		int main(int argc,char **argv); /* Prototype for main() so below line is compiled */
+		main(1,NULL); 			 /* Go to main's else case to print usage. */
 	}
 
 	/* Search argv for 1st occurrence of options position-independency.
 	 * Once an option is found, any subsequent occurrences are ignored.
 	 * NOTE : argv[0] and argv[1] are reserved, search argv[2] onwards.
 	 */
-	for(uint64_t idx = 2; argv[idx]; idx++)
-	{
+	for(size_t idx = 2; argv[idx]; idx++) {
 		if(!f && !strcmp("-f",argv[idx]))
 			f = idx;
 		else if(!p && !strcmp("-p",argv[idx]))
@@ -140,39 +141,31 @@ void init(char ** argv)
 		else if(!o && !strcmp("-o",argv[idx]))
 			o = idx;
 		else if(f && o && p)
-			break; // do not iterate wastefully
-				
+			break; /* do not iterate wastefully */				
 	}
 
 	/* Assign FILE *'s depending on given options.
 	 * Any argument immediately after an option is taken as its file argument. 
 	 * Unrecognised options are ignored.
 	 */
-	if(f) 
-	{
-		char * fname = argv[f+1];
-
-		if(fname && *fname) // In other words, if (fname != NULL && strlen(fname) != 0)
-		{
+	if(f) {
+		const char *fname = argv[f+1];
+		if(fname && *fname) {
 			if(encrypting)
 				plain = fopen(fname,"rb");
 		        else
 				cipher = fopen(fname,"rb");
-
-			if(encrypting? !plain : !cipher)
-			{
-				fprintf(stderr,"Error : Could not open file \"%s\" : %s\n",fname,errno? strerror(errno) : "Unknown error");
+			if(encrypting? !plain : !cipher) {
+				fprintf(stderr,"Error : Could not open file \"%s\"%s%s\n",
+						fname,errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exit(FOPEN_ERR);
 			}
-		}
-		else
-		{
+		} else {
 			fprintf(stderr,"Error : No argument given for option \"-f\"\n");
-			exit(NO_ARGS_FOR_OPTION);
+			exit(NO_ARG_FOR_OPT);
 		}	
-	}
-	else
-	{
+	} else {
 		/* Input is sdtin by default */
 		if(encrypting)
 			plain = stdin;
@@ -188,66 +181,53 @@ void init(char ** argv)
 	 * 2. If decrypting , open file arg to read (the pad from). 
 	 *    If no arg for "-p", and "-f" is given, read pad from stdin.
 	 */
-	if(p)
-	{
-		char * pname = argv[p+1];
+	if(p) {
+		const char *pname = argv[p+1];
 
-		if(pname && *pname)
-		{
+		if(pname && *pname) {
 			pad = fopen(pname,"rb");
-			generate_pad = NO;
+			generate_pad = false;
 			
-			if(encrypting && !pad) 
-			{
+			if(encrypting && !pad) {
 				pad = fopen(pname,"wbx");
-				writing2pad = YES;
-				generate_pad = YES;
+				writing2pad = true;
+				generate_pad = true;
 			}
-			
-			if(!pad)
-			{
-				fprintf(stderr,"Error : Could not open pad \"%s\" : %s\n",pname,errno? strerror(errno) : "Unknown error");
+			if(!pad) {
+				fprintf(stderr,"Error : Could not open pad \"%s\"%s%s\n",
+						pname, errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exit(FOPEN_ERR);
 			}
-		}
-		else
-		{
+		} else {
 			fprintf(stderr,"Error : No argument for option \"-p\"\n");
-			exit(NO_ARGS_FOR_OPTION);
+			exit(NO_ARG_FOR_OPT);
 		}
-	}
-	else
-	{
-		if(encrypting)
-		{
+	} else {
+		if(encrypting) {
 			/* If filename is given, concat it with ".pad", else use "pad.pad" */
-			char * pname = combine(f? argv[f+1] : DEFAULT_PAD_NAME, DEFAULT_PAD_EXTENSION);
+			char *pname = combine(f? argv[f+1] : DEFAULT_PAD_NAME, DEFAULT_PAD_EXTENSION);
 
-			if(!pname)
-			{
+			if(!pname) {
 				fprintf(stderr,"Error : Could not malloc for pad filename.\n");
 				exit(MALLOC_ERR);
 			}
 
-			tofree[0] = pname; // So we can free it later, in another function.
 			pad = fopen(pname,"wb");
-			writing2defpad = YES;
+			writing2defpad = true;
 
-			if(!pad)
-			{
-				fprintf(stderr,"Error : Could not open \"%s\" to save pad : %s\n",pname,errno? strerror(errno) : "Unknown error");
+			if(!pad) {
+				fprintf(stderr,"Error : Could not open \"%s\" to save pad%s%s\n",
+						pname, errno? " : " : ".",
+						errno? strerror(errno) : "Unknown error");
 				free(pname);
 				exit(FOPEN_ERR);
 			}
-
-			
-		}
-		else
-		{
+			tofree = pname;
+		} else {
 			if(f)
 				pad = stdin;
-			else
-			{
+			else {
 				fprintf(stderr,"Error : No pad specified.\n");
 				exit(MISSING_ARG);
 			}
@@ -255,41 +235,36 @@ void init(char ** argv)
 
 	}
 
-	if(o)
-	{
-		char * oname = argv[o+1];
+	if(o) {
+		const char *oname = argv[o+1];
 
-		if(oname && *oname)
-		{
-			writing2outfile = YES;
+		if(oname && *oname) {
+			writing2outfile = true;
 
 			if(encrypting)
 				cipher = fopen(oname,"wb");
 			else
 				plain = fopen(oname,"wb");
 
-			if(encrypting? !cipher : !plain)
-			{
-				fprintf(stderr,"Error : Could not open \"%s\" to write output : %s\n",oname,errno? strerror(errno) : "Unknown error");
-				o = FALSE; // exunt wont attempt remove() on -o file if o == FALSE.
+			if(encrypting? !cipher : !plain) {
+				fprintf(stderr,"Error : Could not open \"%s\" to write output%s%s\n",
+						oname, errno? " : " : ".",
+						errno? strerror(errno) : "");
+				o = false; /* exunt won't attempt remove() on -o file if o == FALSE. */
 				exunt(argv,FOPEN_ERR);
 			}
-		}
-		else
-		{
+		} else {
 			fprintf(stderr,"Error : No argument for option \"-o\"\n");
-			o = FALSE;
-			exunt(argv,NO_ARGS_FOR_OPTION);
+			o = false;
+			exunt(argv,NO_ARG_FOR_OPT);
 		}
-	}
-	else
-	{
+	} else {
 		encrypting? (cipher = stdout) : (plain = stdout);
 	}
 
 }
 
-/* Save BLOCK pad bytes to given stream and return count of bytes saved.
+/* Save BLOCK pad bytes to given buffer and return count of bytes saved.
  *
  * If we must generate pad :
  * 1. "FILE * randf" is unique to *NIX OSes; needs an fopen() + fclose() for the  random device.
@@ -300,13 +275,11 @@ void init(char ** argv)
  *
  * Else, fread(pad).
  */
-size_t getpad(byte * buf,size_t bytes, FILE * randf)
+size_t getpad(uint_fast8_t *restrict buf,const size_t bytes, FILE *restrict randf)
 {
-
-	if(generate_pad)
-	{
+	if(generate_pad) {
 		#if defined WIN
-       			if(RtlGenRandom(buf,bytes))                  // RtlGenRandom() returns boolean.
+       			if(RtlGenRandom(buf,bytes))
 				return bytes;
 			else
 				return 0;
@@ -315,45 +288,48 @@ size_t getpad(byte * buf,size_t bytes, FILE * randf)
 		#else
 			size_t idx;
 			for(idx = 0; idx < bytes; idx++)
-				buf[idx] = rand() % (UINT8_MAX + 1); // Get value in range of 1 unsigned byte (0-255).
+				buf[idx] = rand() % (UINT_FAST8_MAX + 1); /* Get value in range */
 
 			return idx;
 		#endif
-	}
-	else
+	} else
 		return fread(buf,1,bytes,pad);
 }
 
-int main(int argc, char ** argv)
+int main(int argc, char **argv)
 {
 	if(argc >= 2 && strcmp(argv[1],"-h") && strcmp(argv[1],"--help"))
 	{
 		init(argv);
 
-		byte buf1[BLOCK], buf2[BLOCK];		     // Buffers 
-		FILE * from = (encrypting ? plain : cipher); // "from" stream
-		FILE * to = (encrypting ? cipher : plain);   // "to" stream
-		FILE * randf = NULL;
-		size_t frd_frm, frd_pad, fwrt_to, fwrt_pad;  // Counters (for error checking fread/fwrite)
-		
+		uint_fast8_t buf1[BUFSZ/sizeof(uint_fast8_t)], buf2[BUFSZ/sizeof(uint_fast8_t)];
+
+		FILE *restrict from = (encrypting ? plain : cipher),
+		     *restrict to = (encrypting ? cipher : plain),
+		     *restrict randf = NULL;
+
+		size_t frd_frm, frd_pad, fwrt_to, fwrt_pad;  /* Counters for error checking fread/fwrite */
+	
 		#if defined NIX
 			randf = fopen(NIX_RAND_DEV,"rb");
-			if(!randf)
-			{
-				fprintf(stderr,"Error : Could not open %s to generate pad.\n",strerror(errno));
+			if(!randf) {
+				fprintf(stderr,"Error : Could not open "NIX_RAND_DEV" to generate pad%s%s\n",
+						errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exunt(argv,FOPEN_ERR);
 			}
 		#elif defined OTHER
-			srand(time(NULL));
+			srand(time(0));
 		#endif
 
-		while(1)
-		{
-			frd_frm = fread(buf1, 1, BLOCK, from);
+		while(true) {
+			frd_frm = fread(buf1, 1, BUFSZ, from);
 			
 			if(ferror(from))
 			{
-				fprintf(stderr,"Error reading input : %s\n",errno? strerror(errno) : "unknown I/O error");
+				fprintf(stderr,"Error reading input%s%s\n",
+						errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exunt(argv,MID_IO_ERR);
 			}
 
@@ -361,54 +337,54 @@ int main(int argc, char ** argv)
 			
 			if(frd_pad != frd_frm)
 			{
-				fprintf(stderr, "Error getting sufficient pad data : %s\n",errno? strerror(errno) : "unknown error");
+				fprintf(stderr, "Error getting sufficient pad data%s%s\n",
+						errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exunt(argv,MID_IO_ERR);
 			}
 			
-			if(generate_pad)
+			if(generate_pad && (fwrt_pad = fwrite(buf2, 1, frd_frm, pad)) != frd_frm)
 			{
-				fwrt_pad = fwrite(buf2, 1, frd_frm, pad);
 				
-				if(fwrt_pad != frd_frm)
-				{
-					fprintf(stderr,"Error saving pad data : %s\n",errno? strerror(errno) : "unknown I/O error");
-					exunt(argv,MID_IO_ERR);
-				}
+				fprintf(stderr,"Error saving pad data%s%s\n",
+						errno? " : " : ".",
+						errno? strerror(errno) : "");
+				exunt(argv,MID_IO_ERR);
 			}
 
-			for(uint64_t idx = 0; idx < frd_frm; idx++)
+			for(size_t idx = 0; idx < frd_frm; idx++)
 				buf1[idx] ^= buf2[idx];
 
 			fwrt_to = fwrite(buf1, 1, frd_frm, to);
 
 			if(fwrt_to != frd_frm)
 			{
-				fprintf(stderr, "Error writing output : %s\n",errno? strerror(errno) : "unknown I/O errnor");
+				fprintf(stderr, "Error writing output%s%s\n",
+						errno? " : " : ".",
+						errno? strerror(errno) : "");
 				exunt(argv,MID_IO_ERR);
 			}
-
 			if(feof(from))
 				break;
 		}
-
-		freeall();
-		
-		int rval = 0;
+		free(tofree);
+		int rval = SUCCESS;
 		if(fclose(to))
 		{
 			rval = FCLOSE_ERR;
-			fprintf(stderr,"Error saving output : %s\n",errno? strerror(errno) : "unknown error");
+			fprintf(stderr,"Error saving output%s%s\n",
+					errno? " : " : ".",
+					errno? strerror(errno) : "");
 		}
 		if(generate_pad && fclose(pad))
 		{
 			rval = FCLOSE_ERR;
-			fprintf(stderr,"Error saving pad : %s\n",errno? strerror(errno) : "unknown error");
+			fprintf(stderr,"Error saving pad%s%s\n",
+					errno? " : " : ".",
+					errno? strerror(errno) : "");
 		}
 		exit(rval);
-	}
-	else
-	{
-
+	} else {
 		fprintf(stderr,
 		"Invalid arguments, see usage below for help.\n\n"
 		"Simple Usage :\n"
@@ -418,7 +394,7 @@ int main(int argc, char ** argv)
 		"\tDecrypts \"foo.xotp\" with pad \"foo.pad\" and saves to \"foo\"\n"
 		"\n"
 		"Detailed Usage :\n"
-		"-> xotp [command : e or d] [(optional) option] [(optional) option's argument] ...\n"
+		"-> xotp <command : e or d> [(optional) option] [(optional) option's argument] ...\n"
 		"\n"
 		"Options :\n"
 		"\t1. \"-f\" : Give input file.\n"
@@ -437,7 +413,6 @@ int main(int argc, char ** argv)
 		"\n"
 		"See https://github.com/a-p-jo/XOTP for more information.\n"
 		);
-		
-		exit(0); // init() calls main() when invalid mode given; "return" will go back to init, exit() instead.
+		exit(SUCCESS);
 	}
 }
