@@ -1,267 +1,258 @@
-#if !defined __STDC_HOSTED__ || __STDC_VERSION__ < 199901L
-	#error "Hosted C99 implementation required !" 
-#elif defined _WIN32
-	#define WIN
-	#define _CRT_SECURE_NO_WARNINGS
-	#define _WIN32_WINNT _WIN32_WINNT_WINXP
-
-#elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
-	#define NIX
-	#define NIX_RAND_DEV "/dev/urandom"
-#else
-	#define OTHER
-	#include <time.h> /* srand(time(0)) */
-#endif
-
-#include <stdio.h>   /* FILE, fopen(), fclose(), fprintf(), stdin,
-                      * stdout, stderr, fread(), fwrite(), ferror(), feof() */
+#include <stdbool.h>
+#include <limits.h>  /* UCHAR_MAX */
 #include <string.h>  /* strlen(), strcmp(), memcpy(), strerror() */
 #include <stdlib.h>  /* EXIT_SUCCESS, EXIT_FAILURE, malloc(), free(),
                       * exit(), rand(), srand() */
-#include <errno.h>   /* errno */
-#include <stdbool.h> /* bool, true, false */
-#include <limits.h>  /* UCHAR_MAX */
+#include <errno.h>
+#include <stdio.h>   /* FILE, fopen(), fclose(), fprintf(), stdin, remove()
+                      * stdout, stderr, fread(), fwrite(), ferror(), feof() */
 
-/* Default pad name, extension and io blocksize */
-#define DEF_PAD_NAME "pad"
-#define DEF_PAD_EXT  ".pad"
-enum { BLKSZ = 64*1024 };
+#if defined _WIN32
+	#define OS_WIN
+#elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
+	#define OS_NIX
+	#define NIX_RAND_DEV "/dev/urandom"
+#else
+	#define OS_OTHER
+	#include <time.h> /* srand(time(0)) */
+#endif
 
-/* Global state variables */
-bool genpad = true,  /* generating a new pad ? */
-encrypting  = false, /* encrypting ?           */
-wpad        = false, /* wrote to pad ?         */
-wdefpad     = false, /* wrote to default pad ? */
-woutf       = false; /* wrote to outfile       */
-char *fname = NULL,  /* infile                 */
-     *pname = NULL,  /* padfile                */
-     *oname = NULL;  /* outfile                */
-FILE *plain, *cipher, *pad;
-void *tofree = NULL; /* free before exit       */
+#define DEFAULT_PAD_FILENAME  "pad"
+#define DEFAULT_PAD_EXTENSION ".pad"
+#define IO_BLKSZ              (64*1024) /* 64 KiB should be fine */
 
-char *combine(const char *s1, const char *s2)
+typedef struct {
+	bool is_generating_pad : 1, is_encrypting : 1,
+	is_writing_to_pad : 1, is_writing_to_default_pad : 1,
+	is_writing_to_outfile : 1;
+
+	char *in_filename, *pad_filename, *out_filename;
+
+	FILE *plainfile, *cipherfile, *padfile;
+	void *tofree;
+} xotpState;
+
+/* Returns malloc'd copy of s1+s2; all are '\0'-terminated */
+static inline char *strdupcat(const char *s1, const char *s2)
 {
 	size_t l1 = strlen(s1), l2 = strlen(s2);
-	char *res = malloc(l1+l2 + sizeof('\0'));
-	if(res != NULL) {
-		memcpy(res, s1, l1);
-		memcpy(res+l1, s2, l2);
-		res[l1+l2] = '\0';
-	}
+	char *res = malloc(l1+l2 + 1);
+	if (res)
+		memcpy(res, s1, l1), memcpy(res+l1, s2, l2), res[l1+l2] = '\0';
 	return res;
 }
 
-void errexit(void)
+static inline void errexit(const xotpState *state)
 {
-	if(pname && (wpad || wdefpad))
-		remove(pname);
-	if(oname && woutf)
-		remove(oname);
-	free(tofree);
+	if (state->pad_filename && (state->is_writing_to_pad || state->is_writing_to_default_pad))
+		remove(state->pad_filename);
+	if (state->out_filename && state->is_writing_to_outfile)
+		remove(state->out_filename);
+	free(state->tofree);
 	exit(EXIT_FAILURE);
 }
 
-#define streq(s1, s2) (strcmp(s1, s2) == 0)
-#define getsrc()      (encrypting? plain : cipher)
-#define setsrc(f)     (encrypting? (plain = f) : (cipher = f))
-#define getdst()      (encrypting? cipher : plain)
-#define setdst(f)     (encrypting? (cipher = f) : (plain = f))
+static inline bool streq(const char *s1, const char *s2) { return strcmp(s1, s2) == 0; }
 
-void init(int argc, char **argv)
+static inline FILE **srcfile(const xotpState *state)
 {
-	encrypting = streq("e", argv[1]);
-	if(!encrypting) {
-		if(streq("d", argv[1])) 
-			genpad = false; 
+	return (FILE **) (state->is_encrypting ? &state->plainfile : &state->cipherfile); /* const cast */
+}
+static inline FILE **dstfile(const xotpState *state)
+{
+	return (FILE **) (state->is_encrypting ? &state->cipherfile : &state->plainfile); /* const cast */
+}
+
+/* Requires argc >= 2 */
+static xotpState xotpState_init(int argc, char **argv)
+{
+	xotpState state = {.is_generating_pad = true, .is_encrypting = streq("e", argv[1])};
+
+	if (!state.is_encrypting) {
+		if (streq("d", argv[1])) 
+			state.is_generating_pad = false;
 		else {
-			fprintf(stderr, "Unrecognised argument : \"%s\".\n" 
+			fprintf(stderr, "Error : Unrecognised argument : \"%s\".\n" 
 				"Only \"e\" and \"d\" are valid modes.\n", argv[1]);
 			exit(EXIT_FAILURE);
 		}
 	}
 
 	/* Search argv for options. Once found, subsequent matches ignored. */
-	for(int i = 2; i < argc; i++) {
-		if(!fname && streq("-f", argv[i]))
-			fname = argv[++i];
-		else if(!pname && streq("-p", argv[i]))
-			pname = argv[++i];
-		else if(!oname && streq("-o", argv[i]))
-			oname = argv[++i];
-	
-		if(fname && oname && pname)
+	for (int i = 2; i < argc; i++) {
+		if (!state.in_filename && streq("-f", argv[i]))
+			state.in_filename = argv[++i];
+		else if (!state.pad_filename && streq("-p", argv[i]))
+			state.pad_filename = argv[++i];
+		else if (!state.out_filename && streq("-o", argv[i]))
+			state.out_filename = argv[++i];
+
+		if (state.in_filename && state.pad_filename && state.out_filename)
 			break;				
 	}
 
-	if(fname) {
-		setsrc(fopen(fname, "rb"));
-		if(getsrc() == NULL) {
+	if (state.in_filename) {
+		if (!( *srcfile(&state) = fopen(state.in_filename, "rb") )) {
 			fprintf(stderr,"Error : Could not open file \"%s\"%s%s\n",
-					fname, errno? " : " : ".",
+					state.in_filename, errno? " : " : ".",
 					errno? strerror(errno) : "");
 			exit(EXIT_FAILURE);
-		}	
-	} else 
-		setsrc(stdin);
-
-	if(pname) {
-		pad = fopen(pname, "rb");
-		genpad = false;
-		
-		if(encrypting && pad == NULL) {
-			pad = fopen(pname, "wb");
-			wpad = true;
-			genpad = true;
 		}
-		if(pad == NULL) {
+	} else 
+		*srcfile(&state) = stdin;
+
+	if (state.pad_filename) {
+		state.padfile = fopen(state.pad_filename, "rb");
+		state.is_generating_pad = false;
+
+		if (state.is_encrypting && !state.padfile) {
+			state.padfile = fopen(state.pad_filename, "wb");
+			state.is_writing_to_pad = true;
+			state.is_generating_pad = true;
+		}
+		if (!state.padfile) {
 			fprintf(stderr, "Error : Could not open pad \"%s\"%s%s\n",
-					pname, errno? " : " : ".",
+					state.pad_filename, errno? " : " : ".",
 					errno? strerror(errno) : "");
 			exit(EXIT_FAILURE);
 		}
 	} else {
-		if(encrypting) {
-			wdefpad = true;
-			pname = combine(fname? fname : DEF_PAD_NAME, DEF_PAD_EXT);
+		if (state.is_encrypting) {
+			state.is_writing_to_default_pad = true;
 
-			if(pname == NULL) {
+			if (!( state.pad_filename = strdupcat(state.in_filename? state.in_filename : DEFAULT_PAD_FILENAME, DEFAULT_PAD_EXTENSION) )) {
 				fprintf(stderr, "Error : Could not malloc for pad filename.\n");
 				exit(EXIT_FAILURE);
 			}
 
-			pad = fopen(pname, "wb");
-			if(pad == NULL) {
+			if (!( state.padfile = fopen(state.pad_filename, "wb") )) {
 				fprintf(stderr, "Error : Could not open \"%s\" to save pad%s%s\n",
-						pname, errno? " : " : ".",
+						state.pad_filename, errno? " : " : ".",
 						errno? strerror(errno) : "Unknown error");
-				free(pname);
+				free(state.pad_filename);
 				exit(EXIT_FAILURE);
 			}
-			tofree = pname;
-		} else if(fname)
-			pad = stdin;
+			state.tofree = state.pad_filename;
+		} else if (state.in_filename)
+			state.padfile = stdin;
 		else {
 			fprintf(stderr, "Error : No pad specified.\n");
 			exit(EXIT_FAILURE);
 		}
 	}
 
-	if(oname) {
-		woutf = true;
-		setdst(fopen(oname, "wb"));
-		if(getdst() == NULL) {
+	if (state.out_filename) {
+		state.is_writing_to_outfile = true;
+
+		if (!( *dstfile(&state) = fopen(state.out_filename, "wb") )) {
 			fprintf(stderr,"Error : Could not open \"%s\" to write output%s%s\n",
-					oname, errno? " : " : ".",
+					state.out_filename, errno? " : " : ".",
 					errno? strerror(errno) : "");
-			oname = NULL; /* errexit() won't remove(oname) if NULL */
-			errexit();
+			state.out_filename = NULL; /* errexit() won't remove(oname) if NULL */
+			errexit(&state);
 		}
 	} else
-		setdst(stdout);
+		*dstfile(&state) = stdout;
+
+	return state;
 }
 
-bool getpad(unsigned char *restrict buf, size_t bytes, FILE *randf)
+typedef unsigned char byte;
+
+static inline bool getpad(xotpState *state, byte *restrict dst, FILE *src, size_t nbytes)
 {
-	if(genpad) {
-		#ifdef WIN
-       			return RtlGenRandom(buf, bytes)
-		#elif defined NIX
-			return fread(buf, 1, bytes, randf) == bytes;
+	if (state->is_generating_pad) {
+		#ifdef OS_WIN
+       			return RtlGenRandom(dst, nbytes)
+		#elif defined OS_NIX
+			return fread(dst, 1, nbytes, src) == nbytes;
 		#else
-			for(size_t i = 0; i < bytes; i++)
-				buf[i] = rand() % (UCHAR_MAX+1);
+			for (size_t i = 0; i < nbytes; i++)
+				dst[i] = rand() % (UCHAR_MAX+1);
 			return true;
 		#endif
 	} else
-		return fread(buf, 1, bytes, pad) == bytes;
+		return fread(dst, 1, nbytes, state->padfile) == nbytes;
 }
 
 int main(int argc, char **argv)
 {
-	if(argc >= 2 && !streq("-h", argv[1]) && !streq("--help", argv[1]))
-	{
-		init(argc, argv);
-
-		unsigned char buf1[BLKSZ], buf2[BLKSZ];
-		FILE *src = getsrc(), *dst = getdst(), *randf = NULL;
+	if (argc >= 2 && !streq("-h", argv[1]) && !streq("--help", argv[1])) {
+		xotpState state = xotpState_init(argc, argv);
+		byte buf1[IO_BLKSZ], buf2[IO_BLKSZ];
+		FILE *src = *srcfile(&state), *dst = *dstfile(&state), *randf = NULL;
 		
-		#ifdef NIX
-			randf = fopen(NIX_RAND_DEV, "rb");
-			if(randf == NULL) {
+		#ifdef OS_NIX
+			if (!( randf = fopen(NIX_RAND_DEV, "rb") )) {
 				fprintf(stderr, "Error : Could not open "NIX_RAND_DEV" to generate pad%s%s\n",
 						errno? " : " : ".",
 						errno? strerror(errno) : "");
-				errexit();
+				errexit(&state);
 			}
-		#elif defined OTHER
+		#elif defined OS_OTHER
 			srand(time(0));
 		#endif
 
-		for(size_t frd_src, fwrt_dst, fwrt_pad; !feof(src); ) {
-			frd_src = fread(buf1, 1, BLKSZ, src);
+		
+		while (!feof(src)) {
+			size_t nsrc = fread(buf1, 1, sizeof(buf1), src);
 			
-			if(ferror(src))
-			{
+			if (ferror(src)) {
 				fprintf(stderr,"Error reading input%s%s\n",
 						errno? " : " : ".",
 						errno? strerror(errno) : "");
-				errexit();
+				errexit(&state);
 			}
 			
-			if(!getpad(buf2, frd_src, randf))
-			{
+			if (!getpad(&state, buf2, randf, nsrc)) {
 				fprintf(stderr, "Error getting sufficient pad data%s%s\n",
 						errno? " : " : ".",
 						errno? strerror(errno) : "");
-				errexit();
+				errexit(&state);
 			}
 			
-			if(genpad && (fwrt_pad = fwrite(buf2, 1, frd_src, pad)) != frd_src)
-			{		
+			size_t npad;
+			if (state.is_generating_pad && (npad = fwrite(buf2, 1, nsrc, state.padfile)) != nsrc) {		
 				fprintf(stderr,"Error saving pad data%s%s\n",
 						errno? " : " : ".",
 						errno? strerror(errno) : "");
-				errexit();
+				errexit(&state);
 			}
 
-			for(size_t i = 0; i < frd_src; i++)
+			for (size_t i = 0; i < nsrc; i++)
 				buf1[i] ^= buf2[i];
 
-			fwrt_dst = fwrite(buf1, 1, frd_src, dst);
-			if(fwrt_dst != frd_src)
-			{
+			size_t ndst = fwrite(buf1, 1, nsrc, dst);
+			if (ndst != nsrc) {
 				fprintf(stderr, "Error writing output%s%s\n",
 						errno? " : " : ".",
 						errno? strerror(errno) : "");
-				errexit();
+				errexit(&state);
 			}
 		}
-		
-		free(tofree);
-		if(fclose(dst) == EOF)
-		{
+
+		free(state.tofree);
+		if (fclose(dst) == EOF) {
 			fprintf(stderr,"Error saving output%s%s\n",
 					errno? " : " : ".",
 					errno? strerror(errno) : "");
 			exit(EXIT_FAILURE);
 		}
-		if(genpad && fclose(pad) == EOF)
-		{
+		if (state.is_generating_pad && fclose(state.padfile) == EOF) {
 			fprintf(stderr,"Error saving pad%s%s\n",
 					errno? " : " : ".",
 					errno? strerror(errno) : "");
 			exit(EXIT_FAILURE);
-		}
-		else
+		} else
 			exit(EXIT_SUCCESS);
 	} else {
 		fprintf(stderr,
 		"Invalid arguments, see usage below for help.\n\n"
 		"Simple Usage :\n"
-		"-> \"xotp e -f x\"\n"
-		"\tEncrypt \"foo\", pad generated and saved to foo.pad, ciphertext to foo.xotp\n"
+		"-> \"xotp e -f foo -o foo.xotp\"\n"
+		"\tEncrypts foo, pad generated and saved to foo.pad, ciphertext saved to foo.xotp .\n"
 		"-> \"xotp d -f foo.xotp -p foo.pad -o foo\"\n"
-		"\tDecrypts \"foo.xotp\" with pad \"foo.pad\" and saves to \"foo\"\n"
+		"\tDecrypts foo.xotp with pad foo.pad and saves to foo.\n"
 		"\n"
 		"Detailed Usage :\n"
 		"-> xotp <command : e or d> [(optional) option] [(optional) option's argument] ...\n"
@@ -279,7 +270,7 @@ int main(int argc, char **argv)
 		"\t\tWithout \"-p\", if \"-f\" is supplied, pad is read from stdin.\n"
 		"\n"
 		"\t3. \"-o\" : Give output file.\n"
-		"\tWithout \"-o\", output is written to stdout\n"
+		"\tWithout \"-o\", output is written to stdout.\n"
 		"\n"
 		"See https://github.com/a-p-jo/XOTP for more information.\n");
 		exit(EXIT_SUCCESS);
