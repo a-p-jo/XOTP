@@ -1,10 +1,10 @@
-# XOTP : XOR One Time Pad v2.4
+# XOTP : XOR One Time Pad v2.5
 
 > "The one-time pad (OTP) is an encryption technique that cannot be cracked, but requires the use of a one-time pre-shared key the same size as, or longer than, the message being sent. In this technique, a plaintext is paired with a random secret key (also referred to as a one-time pad). Then, each bit or character of the plaintext is encrypted by combining it with the corresponding bit or character from the pad. "
 
 [(Wikipedia)](https://en.wikipedia.org/wiki/One-time_pad)
 
-XOTP is an implementation of this , written in C, that uses the bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key, hence the name.
+XOTP is an implementation of this, written in C, that uses bitwise [Exclusive-OR (XOR)](https://en.wikipedia.org/wiki/Exclusive_or) to combine the bytes of the plaintext with those of the key, hence the name.
 
 ### Usage 
 
@@ -14,20 +14,19 @@ As XOTP itself will tell you :
 -> xotp <command : e or d> [(optional) option] [(optional) option's argument] ...
 
 Options :
-
 	1. "-f" : Give input file.
 	 Without "-f", input is read from stdin.
 
 	2. "-p" : Give pad file.
-		2.1 If encrypting : if the pad file exists, it is read as the pad.
+		2.1 : If encrypting : if the pad file exists, it is read as the pad.
 		If not, the generated pad is saved to it.
 		Without "-p" , pad is saved to the input file (if specified) with a ".pad" extension.
 		Otherwise, it is saved to "pad.pad"
-		2.2 If decrypting : the pad file is read to decrypt the input.
+		2.2 : If decrypting : the pad file is read to decrypt the input.
 		Without "-p", if "-f" is supplied, pad is read from stdin.
 
 	3. "-o" : Give output file.
-	Without "-o", output is written to stdout
+	Without "-o", output is written to stdout.
 ```
 The *idea* behind arguments to XOTP is "*control by implication*".
 Explicit commands are also possible; the idea is to equip the user to imply more than he types.
