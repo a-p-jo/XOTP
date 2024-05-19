@@ -8,6 +8,9 @@
                       * stdout, stderr, fread(), fwrite(), ferror(), feof() */
 
 #if defined _WIN32
+	#define WIN32_LEAN_AND_MEAN
+	#include <windows.h>  /* Needed for ntsecapi.h              */
+	#include <ntsecapi.h> /* RtlGenRandom() (link advapi32.dll) */
 	#define OS_WIN
 #elif defined __unix__ || (defined __APPLE__ && defined __MACH__)
 	#define OS_NIX
